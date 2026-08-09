@@ -4,7 +4,10 @@ from lakebase import init_db, get_connection, USE_POSTGRES
 from dotenv import load_dotenv
 
 # Ensure root is on path
-sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+if "__file__" in globals():
+    sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+else:
+    sys.path.append(os.getcwd())
 
 # Load env variables
 load_dotenv()

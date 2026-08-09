@@ -10,7 +10,11 @@ from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
 # Ensure parent directory is on the path to import lakebase and massive_client
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+if "__file__" in globals():
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+else:
+    sys.path.append(os.getcwd())
+    sys.path.append(os.path.abspath(".."))
 from lakebase import get_connection, USE_POSTGRES, USE_PGVECTOR, python_cosine_similarity
 from massive_client import MassiveClient
 

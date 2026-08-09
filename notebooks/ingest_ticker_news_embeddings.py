@@ -8,7 +8,11 @@ from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
 # Ensure root directory is on the path to import lakebase
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+if "__file__" in globals():
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+else:
+    sys.path.append(os.getcwd())
+    sys.path.append(os.path.abspath(".."))
 from lakebase import get_connection, USE_POSTGRES, USE_PGVECTOR
 
 # Load env variables
