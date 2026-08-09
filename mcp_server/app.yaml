@@ -1,0 +1,9 @@
+# Databricks App Configuration for Financial Research Agent MCP Server
+command: ["python", "financial_mcp_server.py"]
+env:
+  - name: MASSIVE_SECRET_SCOPE
+    value: "massive"
+  - name: MASSIVE_SECRET_KEY
+    value: "api-key"
+  - name: MASSIVE_API_BASE_URL
+    value: "https://api.massive.com"

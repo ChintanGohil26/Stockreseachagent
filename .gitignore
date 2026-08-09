@@ -1,0 +1,19 @@
+# Python local files
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+
+# SQLite local databases
+lakebase_local.db
+*.db-journal
+*.db-wal
+
+# Streamlit config/cache
+.streamlit/
+*.log
+
+# Virtual Environments
+.venv/
+venv/
+ENV/

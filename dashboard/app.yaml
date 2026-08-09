@@ -1,0 +1,5 @@
+# Databricks App Configuration for Dashboard Frontend
+command: ["streamlit", "run", "app.py"]
+env:
+  - name: LAKEBASE_URL
+    value: ""
