@@ -1,4 +1,7 @@
 import os
+# Fix OpenSSL FIPS self-test failure inside Databricks sandbox
+os.environ.pop("OPENSSL_FORCE_FIPS_MODE", None)
+
 import sys
 import streamlit as st
 import pandas as pd

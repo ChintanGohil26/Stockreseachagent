@@ -17,6 +17,8 @@
 
 # COMMAND SOURCE CELL
 import os
+# Fix OpenSSL FIPS self-test failure inside Databricks sandbox
+os.environ.pop("OPENSSL_FORCE_FIPS_MODE", None)
 
 # Set your Gemini API Key here for the agent chat:
 os.environ["GEMINI_API_KEY"] = "YOUR_GEMINI_API_KEY_HERE"
