@@ -7,6 +7,21 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
+import base64
+
+def decode_base64_url(url):
+    if not url:
+        return url
+    try:
+        url_str = url.strip()
+        if not (url_str.startswith("postgresql://") or url_str.startswith("postgres://")):
+            decoded = base64.b64decode(url_str).decode("utf-8")
+            if decoded.startswith("postgresql://") or decoded.startswith("postgres://"):
+                return decoded
+    except Exception:
+        pass
+    return url
+
 # Load environment variables
 load_dotenv()
 
@@ -20,6 +35,7 @@ if not LAKEBASE_URL:
     except Exception:
         pass
 
+LAKEBASE_URL = decode_base64_url(LAKEBASE_URL)
 USE_POSTGRES = bool(LAKEBASE_URL)
 
 def check_if_pgvector_supported():
