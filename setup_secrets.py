@@ -1,76 +1,81 @@
 import os
 import sys
+import getpass
 from dotenv import load_dotenv
 
-# Load env variables from local file
-load_dotenv()
+def prompt_and_deploy_secrets():
+    """
+    Interactively prompts the user for secrets in the terminal or notebook prompt,
+    writes them to a local .env file, and deploys them to a secure Databricks Secret Scope.
+    """
+    print("====================================================================")
+    print("🔒 Secure API & Lakebase Credentials Configurator")
+    print("====================================================================\n")
 
-def deploy_secrets():
-    """
-    Automates uploading secrets from local .env file to Databricks Secret Scope.
-    Aligns with Day 3 secrets management requirements.
-    """
-    print("Initializing Databricks SDK Secrets Deployer...")
-    
-    # Check if we have databricks-sdk installed
+    # Prompt user securely
+    print("Please enter your Google Gemini API Key (input will be hidden):")
+    gemini_key = getpass.getpass("Gemini API Key: ").strip()
+
+    print("\nPlease enter your Lakebase PostgreSQL Connection URL (input will be hidden):")
+    print("Format: postgresql://username:password@host:port/database")
+    lakebase_url = getpass.getpass("Lakebase URL: ").strip()
+
+    print("\nPlease enter your Massive Stocks API Key (optional - press Enter to skip):")
+    massive_key = getpass.getpass("Massive API Key: ").strip()
+
+    # 1. Write to local .env file
+    env_content = f"""# ====================================================================
+# Auto-generated Credentials Configuration
+# ====================================================================
+GEMINI_API_KEY={gemini_key}
+LAKEBASE_URL={lakebase_url}
+MASSIVE_STOCKS_API_KEY={massive_key}
+"""
+    try:
+        with open(".env", "w") as f:
+            f.write(env_content)
+        print("\n✅ Successfully created local .env file.")
+    except Exception as e:
+        print(f"\n❌ Error writing local .env file: {e}")
+
+    # 2. Upload to Databricks Secrets Scope
     try:
         from databricks.sdk import WorkspaceClient
-    except ImportError:
-        print("Error: databricks-sdk is not installed. Run 'pip install databricks-sdk' first.")
-        sys.exit(1)
-
-    # Resolve variables to upload
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    lakebase_url = os.getenv("LAKEBASE_URL") or os.getenv("DATABASE_URL")
-    massive_key = os.getenv("MASSIVE_STOCKS_API_KEY") or os.getenv("MASSIVE_API_KEY")
-
-    if not any([gemini_key, lakebase_url, massive_key]):
-        print("Warning: No credentials found in .env to upload. Please fill in your .env file first.")
-        sys.exit(1)
-
-    scope_name = "financial_agent_scope"
-
-    try:
-        # Initialize client (uses standard Databricks environment credentials)
+        print("\nConnecting to Databricks Workspace Client...")
         w = WorkspaceClient()
-        print(f"Connected to Databricks workspace: {w.config.host}")
-        
-        # 1. Create secret scope
-        print(f"Creating secret scope '{scope_name}'...")
+        print(f"Connected to workspace: {w.config.host}")
+
+        scope_name = "financial_agent_scope"
+        print(f"Ensuring secret scope '{scope_name}' exists...")
         try:
             w.secrets.create_scope(scope=scope_name)
-            print(f"Scope '{scope_name}' created successfully.")
+            print(f"Created scope '{scope_name}'.")
         except Exception as e:
             if "RESOURCE_ALREADY_EXISTS" in str(e):
-                print(f"Scope '{scope_name}' already exists. Continuing to secrets upload...")
+                print(f"Scope '{scope_name}' already exists.")
             else:
                 raise e
 
-        # 2. Upload secrets
+        # Upload keys
         if gemini_key:
-            print("Uploading GEMINI_API_KEY...")
             w.secrets.put_secret(scope=scope_name, key="gemini-api-key", string_value=gemini_key)
-            print("GEMINI_API_KEY uploaded.")
-            
+            print("🔑 Uploaded: gemini-api-key")
         if lakebase_url:
-            print("Uploading LAKEBASE_URL...")
             w.secrets.put_secret(scope=scope_name, key="lakebase-url", string_value=lakebase_url)
-            print("LAKEBASE_URL uploaded.")
-
+            print("🔑 Uploaded: lakebase-url")
         if massive_key:
-            print("Uploading MASSIVE_STOCKS_API_KEY...")
             w.secrets.put_secret(scope=scope_name, key="massive-api-key", string_value=massive_key)
-            print("MASSIVE_STOCKS_API_KEY uploaded.")
+            print("🔑 Uploaded: massive-api-key")
 
-        print("\nAll secrets uploaded successfully. Your Databricks application can now query this scope.")
+        print("\n🚀 All credentials uploaded to your Databricks Secret Scope successfully!")
+        print("Your notebooks and apps can now retrieve these credentials securely.")
         
+    except ImportError:
+        print("\n⚠️  databricks-sdk is not installed. Secrets were only saved to the local .env file.")
+        print("To deploy to Databricks Secrets, run 'pip install databricks-sdk' and execute this script again.")
     except Exception as e:
-        print(f"\nFailed to upload secrets to Databricks: {e}")
-        print("\n=== Troubleshooting Tips ===")
-        print("1. Ensure you have the Databricks CLI configured locally via 'databricks configure'.")
-        print("2. Ensure your terminal has the DATABRICKS_HOST and DATABRICKS_TOKEN environment variables set.")
-        print("3. Alternatively, you can run this script directly inside a Databricks Notebook cell using:")
-        print("   %sh python setup_secrets.py")
+        print(f"\n⚠️  Saved to .env, but could not deploy to Databricks Secrets: {e}")
+        print("This is normal if you are running locally without Databricks authentication configured.")
 
 if __name__ == "__main__":
-    deploy_secrets()
+    prompt_and_deploy_secrets()

@@ -33,8 +33,8 @@ class MassiveClient:
     def _resolve_api_key(self):
         """
         Attempts to resolve the API key.
-        1. Checks Databricks Secrets (if running in Databricks).
-        2. Checks environment variables (local/fallback).
+        1. Checks environment variables (local/fallback).
+        2. Checks Databricks Secrets scope.
         """
         # Try local environment variable first
         env_key = os.getenv("MASSIVE_STOCKS_API_KEY") or os.getenv("MASSIVE_API_KEY")
@@ -45,9 +45,11 @@ class MassiveClient:
         try:
             from databricks.sdk import WorkspaceClient
             w = WorkspaceClient()
-            return w.secrets.get_secret(scope=self.scope, key=self.key).value
+            try:
+                return w.secrets.get_secret(scope="financial_agent_scope", key="massive-api-key").value
+            except Exception:
+                return w.secrets.get_secret(scope=self.scope, key=self.key).value
         except Exception:
-            # Fallback failed
             return None
 
     def get(self, path, params=None):

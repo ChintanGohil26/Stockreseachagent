@@ -9,6 +9,14 @@ from lakebase import get_connection, USE_POSTGRES
 
 # Configure Gemini API Key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    try:
+        from databricks.sdk import WorkspaceClient
+        w = WorkspaceClient()
+        GEMINI_API_KEY = w.secrets.get_secret(scope="financial_agent_scope", key="gemini-api-key").value
+    except Exception:
+        pass
+
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     HAS_GEMINI = True

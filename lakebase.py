@@ -12,6 +12,14 @@ load_dotenv()
 
 # Determine DB Engine: SQLite fallback or Postgres/Lakebase
 LAKEBASE_URL = os.getenv("LAKEBASE_URL") or os.getenv("DATABASE_URL")
+if not LAKEBASE_URL:
+    try:
+        from databricks.sdk import WorkspaceClient
+        w = WorkspaceClient()
+        LAKEBASE_URL = w.secrets.get_secret(scope="financial_agent_scope", key="lakebase-url").value
+    except Exception:
+        pass
+
 USE_POSTGRES = bool(LAKEBASE_URL)
 
 class SQLiteRealDictCursor(sqlite3.Cursor):
