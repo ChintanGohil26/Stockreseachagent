@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 sys.path.append(os.getcwd())
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from lakebase import get_connection, USE_POSTGRES, sqlite_cosine_similarity
+from lakebase import get_connection, USE_POSTGRES, USE_PGVECTOR, python_cosine_similarity
 from agent import FinancialAgent
 from massive_client import MassiveClient
 
