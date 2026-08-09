@@ -10,7 +10,9 @@ import requests
 import datetime
 from dotenv import load_dotenv
 
-# Ensure parent directory is on path to import lakebase, massive_client, and agent
+# Ensure parent directory and root directory are on path to import lakebase, massive_client, and agent
+sys.path.append(os.getcwd())
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from lakebase import get_connection, USE_POSTGRES, sqlite_cosine_similarity
 from agent import FinancialAgent

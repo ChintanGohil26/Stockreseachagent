@@ -1,0 +1,7 @@
+# Databricks App Configuration for Root Deployment
+command: ["streamlit", "run", "dashboard/app.py"]
+env:
+  - name: LAKEBASE_URL
+    value: ""
+  - name: GEMINI_API_KEY
+    value: ""
