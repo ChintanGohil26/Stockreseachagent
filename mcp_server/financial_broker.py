@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 # Ensure parent directory is on the path to import lakebase and massive_client
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from lakebase import get_connection, USE_POSTGRES, sqlite_cosine_similarity
+from lakebase import get_connection, USE_POSTGRES, USE_PGVECTOR, python_cosine_similarity
 from massive_client import MassiveClient
 
 # Load env variables
@@ -247,7 +247,7 @@ class FinancialBroker:
             query_emb = model.encode(query).tolist()
             matches = []
 
-            if USE_POSTGRES:
+            if USE_PGVECTOR:
                 with get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute("""
@@ -270,8 +270,8 @@ class FinancialBroker:
                             "similarity": float(r["similarity"])
                         })
             else:
-                # SQLite custom cosine similarity
-                raw_matches = sqlite_cosine_similarity(query_emb, limit=5, table="companies")
+                # Python fallback similarity calculation
+                raw_matches = python_cosine_similarity(query_emb, limit=5, table="companies")
                 for r in raw_matches:
                     matches.append({
                         "ticker": r["ticker"],

@@ -22,6 +22,36 @@ if not LAKEBASE_URL:
 
 USE_POSTGRES = bool(LAKEBASE_URL)
 
+def check_if_pgvector_supported():
+    """
+    Checks if pgvector is enabled or can be enabled on the remote PostgreSQL database.
+    """
+    if not USE_POSTGRES:
+        return False
+    try:
+        conn = psycopg2.connect(LAKEBASE_URL)
+        cur = conn.cursor()
+        # Try to run CREATE EXTENSION IF NOT EXISTS vector;
+        try:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+            conn.commit()
+            cur.close()
+            conn.close()
+            return True
+        except Exception:
+            conn.rollback()
+            # Check if vector type already exists
+            cur.execute("SELECT 1 FROM pg_type WHERE typname = 'vector';")
+            exists = bool(cur.fetchone())
+            cur.close()
+            conn.close()
+            return exists
+    except Exception:
+        return False
+
+# Global flag indicating if native pgvector operations are supported
+USE_PGVECTOR = check_if_pgvector_supported()
+
 class SQLiteRealDictCursor(sqlite3.Cursor):
     """
     SQLite cursor wrapper that returns results as list of dictionaries,
@@ -96,8 +126,9 @@ def get_connection():
 
 def init_db():
     """
-    Executes schema.sql on the connected database engine.
-    Translates PostgreSQL DDL to SQLite DDL dynamically if running on SQLite.
+    Executes schema.sql on the connected database.
+    Dynamically translates PostgreSQL DDL (removing pgvector constraints if unsupported
+    or generating SQLite specific queries).
     """
     schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
     if not os.path.exists(schema_path):
@@ -108,9 +139,23 @@ def init_db():
 
     with get_connection() as conn:
         cursor = conn.cursor()
+        
         if USE_POSTGRES:
-            print("Initializing database using PostgreSQL/Lakebase...")
-            cursor.execute(ddl)
+            if USE_PGVECTOR:
+                print("Initializing database using PostgreSQL with pgvector...")
+                cursor.execute(ddl)
+            else:
+                print("Initializing database using PostgreSQL with TEXT fallback (pgvector NOT supported)...")
+                # Remove CREATE EXTENSION and replace vector(384) with TEXT
+                ddl_clean = ddl.replace("CREATE EXTENSION IF NOT EXISTS vector;", "")
+                ddl_clean = ddl_clean.replace("vector(384)", "TEXT")
+                
+                # Execute statement by statement
+                statements = ddl_clean.split(";")
+                for stmt in statements:
+                    stmt_strip = stmt.strip()
+                    if stmt_strip:
+                        cursor.execute(stmt_strip)
         else:
             print("Initializing database using SQLite fallback...")
             # Translate postgres specific SQL syntax to SQLite
@@ -124,13 +169,13 @@ def init_db():
                 stmt_strip = stmt.strip()
                 if stmt_strip:
                     cursor.execute(stmt_strip)
+                    
     print("Database initialized successfully.")
 
-# Custom Cosine Similarity search function for SQLite
-def sqlite_cosine_similarity(query_emb, limit=5, table="news_embeddings"):
+def python_cosine_similarity(query_emb, limit=5, table="news_embeddings"):
     """
-    Performs cosine similarity calculation in Python using numpy for SQLite tables.
-    Returns matches with distance and content.
+    Performs cosine similarity calculation in Python using numpy.
+    Acts as a fallback if the database lacks native pgvector support.
     """
     query_vector = np.array(query_emb, dtype=np.float32)
     
@@ -144,7 +189,7 @@ def sqlite_cosine_similarity(query_emb, limit=5, table="news_embeddings"):
                 JOIN news_articles d ON d.id = e.article_id
             """)
         else: # company profiles
-            cursor.execute("SELECT ticker, name, sector, industry, profile_text, profile_embedding FROM companies")
+            cursor.execute("SELECT ticker, name, sector, industry, profile_text, filings_excerpt, earnings_summary, profile_embedding FROM companies")
             
         rows = cursor.fetchall()
         
@@ -154,8 +199,12 @@ def sqlite_cosine_similarity(query_emb, limit=5, table="news_embeddings"):
         if not emb_str:
             continue
         try:
-            # Parse stored JSON array
-            emb = np.array(json.loads(emb_str), dtype=np.float32)
+            # Parse stored JSON array (or string representation of float array)
+            if isinstance(emb_str, str):
+                emb = np.array(json.loads(emb_str), dtype=np.float32)
+            else:
+                # If database returned it as a list/array directly
+                emb = np.array(emb_str, dtype=np.float32)
         except Exception:
             continue
             

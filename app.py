@@ -5,7 +5,7 @@ os.environ.pop("OPENSSL_FORCE_FIPS_MODE", None)
 import json
 from flask import Flask, request, jsonify
 from sentence_transformers import SentenceTransformer
-from lakebase import get_connection, USE_POSTGRES, sqlite_cosine_similarity
+from lakebase import get_connection, USE_POSTGRES, USE_PGVECTOR, python_cosine_similarity
 from massive_client import MassiveClient
 import psycopg2
 from psycopg2.extras import execute_values
@@ -14,7 +14,6 @@ from psycopg2.extras import execute_values
 app = Flask(__name__)
 
 # Load Sentence Transformer Model (Load once at app startup)
-# We specify device="cpu" to run efficiently on standard Databricks single nodes or local test runs
 print("Loading sentence-transformers/all-MiniLM-L6-v2 model...")
 model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 print("Model loaded successfully.")
@@ -30,6 +29,7 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "database": "postgresql" if USE_POSTGRES else "sqlite-fallback",
+        "pgvector_enabled": USE_PGVECTOR,
         "sandbox_mode": massive.is_sandbox
     })
 
@@ -192,7 +192,7 @@ def search_news():
     query_emb = model.encode(query).tolist()
 
     matches = []
-    if USE_POSTGRES:
+    if USE_PGVECTOR:
         try:
             with get_connection() as conn:
                 cursor = conn.cursor()
@@ -217,8 +217,8 @@ def search_news():
         except Exception as e:
             return jsonify({"error": f"Database search failed: {str(e)}"}), 500
     else:
-        # SQLite python cosine similarity fallback
-        raw_matches = sqlite_cosine_similarity(query_emb, limit=top_k, table="news_embeddings")
+        # Python cosine similarity fallback (for SQLite and non-pgvector Postgres)
+        raw_matches = python_cosine_similarity(query_emb, limit=top_k, table="news_embeddings")
         for r in raw_matches:
             matches.append({
                 "id": r["article_id"],

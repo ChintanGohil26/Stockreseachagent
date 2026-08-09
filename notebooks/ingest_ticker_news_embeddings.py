@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 # Ensure root directory is on the path to import lakebase
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from lakebase import get_connection, USE_POSTGRES
+from lakebase import get_connection, USE_POSTGRES, USE_PGVECTOR
 
 # Load env variables
 load_dotenv()
@@ -36,7 +36,7 @@ def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
 def ingest_embeddings():
     """
     Ingests embeddings for companies and news articles using sentence-transformers.
-    Works for both Postgres/pgvector and SQLite local fallbacks.
+    Works for Postgres (with or without pgvector) and SQLite local fallbacks.
     """
     print(f"Loading embedding model: {MODEL_NAME}...")
     model = SentenceTransformer(MODEL_NAME, device="cpu")
@@ -61,10 +61,15 @@ def ingest_embeddings():
             
             with get_connection() as conn:
                 cursor = conn.cursor()
-                if USE_POSTGRES:
+                if USE_PGVECTOR:
                     cursor.execute(
                         "UPDATE companies SET profile_embedding = %s::vector WHERE ticker = %s",
                         (embedding, ticker)
+                    )
+                elif USE_POSTGRES:
+                    cursor.execute(
+                        "UPDATE companies SET profile_embedding = %s WHERE ticker = %s",
+                        (json.dumps(embedding), ticker)
                     )
                 else:
                     # SQLite stores list as JSON string
@@ -81,18 +86,11 @@ def ingest_embeddings():
     with get_connection() as conn:
         cursor = conn.cursor()
         # Find news articles that don't have chunks in news_embeddings
-        if USE_POSTGRES:
-            cursor.execute("""
-                SELECT id, ticker, headline, content 
-                FROM news_articles 
-                WHERE id NOT IN (SELECT DISTINCT article_id FROM news_embeddings)
-            """)
-        else:
-            cursor.execute("""
-                SELECT id, ticker, headline, content 
-                FROM news_articles 
-                WHERE id NOT IN (SELECT DISTINCT article_id FROM news_embeddings)
-            """)
+        cursor.execute("""
+            SELECT id, ticker, headline, content 
+            FROM news_articles 
+            WHERE id NOT IN (SELECT DISTINCT article_id FROM news_embeddings)
+        """)
         articles_to_embed = cursor.fetchall()
 
     if articles_to_embed:
@@ -113,11 +111,16 @@ def ingest_embeddings():
                 
                 with get_connection() as conn:
                     cursor = conn.cursor()
-                    if USE_POSTGRES:
+                    if USE_PGVECTOR:
                         cursor.execute("""
                             INSERT INTO news_embeddings (article_id, chunk_index, chunk_text, embedding)
                             VALUES (%s, %s, %s, %s::vector)
                         """, (article_id, i, chunk, embedding))
+                    elif USE_POSTGRES:
+                        cursor.execute("""
+                            INSERT INTO news_embeddings (article_id, chunk_index, chunk_text, embedding)
+                            VALUES (%s, %s, %s, %s)
+                        """, (article_id, i, chunk, json.dumps(embedding)))
                     else:
                         cursor.execute("""
                             INSERT INTO news_embeddings (article_id, chunk_index, chunk_text, embedding)
