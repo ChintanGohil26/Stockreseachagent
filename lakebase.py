@@ -204,13 +204,6 @@ def python_cosine_similarity(query_emb, limit=5, table="news_embeddings"):
                 FROM news_embeddings e
                 JOIN news_articles d ON d.id = e.article_id
             """)
-        elif table == "weather_embeddings":
-            cursor.execute("""
-                SELECT e.id, e.document_id, e.chunk_index, e.chunk_text, e.embedding,
-                       d.location, d.headline, d.narrative_text, d.issued_at
-                FROM weather_embeddings e
-                JOIN weather_documents d ON d.id = e.document_id
-            """)
         else: # company profiles
             cursor.execute("SELECT ticker, name, sector, industry, profile_text, filings_excerpt, earnings_summary, profile_embedding FROM companies")
             
@@ -218,7 +211,7 @@ def python_cosine_similarity(query_emb, limit=5, table="news_embeddings"):
         
     results = []
     for r in rows:
-        emb_str = r.get("embedding") if table in ["news_embeddings", "weather_embeddings"] else r.get("profile_embedding")
+        emb_str = r.get("embedding") if table == "news_embeddings" else r.get("profile_embedding")
         if not emb_str:
             continue
         try:
