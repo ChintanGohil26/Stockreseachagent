@@ -7,6 +7,7 @@ from flask import Flask, request, jsonify
 from sentence_transformers import SentenceTransformer
 from lakebase import get_connection, USE_POSTGRES, USE_PGVECTOR, python_cosine_similarity
 from massive_client import MassiveClient
+from weather_client import WeatherClient
 import psycopg2
 from psycopg2.extras import execute_values
 
@@ -223,6 +224,127 @@ def search_news():
             matches.append({
                 "id": r["article_id"],
                 "ticker": r["ticker"],
+                "headline": r["headline"],
+                "chunk_text": r["chunk_text"],
+                "similarity": float(r["similarity"])
+            })
+
+    return jsonify({
+        "query": query,
+        "results": matches
+    })
+
+@app.route("/weather/sync", methods=["POST"])
+def sync_weather():
+    """
+    POST /weather/sync
+    Body: {"locations": ["Chicago, IL", "Austin, TX"]}
+    Fetches weather forecasts and alerts, and upserts them into Lakebase weather_documents.
+    """
+    body = request.get_json() or {}
+    locations = body.get("locations", ["Chicago, IL", "Austin, TX"])
+
+    if not isinstance(locations, list) or not locations:
+        return jsonify({"error": "locations must be a non-empty list"}), 400
+
+    weather_client = WeatherClient()
+    synced_count = 0
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        for loc in locations:
+            try:
+                docs = weather_client.harvest_weather(loc)
+                for doc in docs:
+                    if USE_POSTGRES:
+                        cursor.execute("""
+                            INSERT INTO weather_documents (id, location, source_type, headline, narrative_text, issued_at, payload)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (id) DO UPDATE SET
+                                location = EXCLUDED.location,
+                                source_type = EXCLUDED.source_type,
+                                headline = EXCLUDED.headline,
+                                narrative_text = EXCLUDED.narrative_text,
+                                issued_at = EXCLUDED.issued_at,
+                                payload = EXCLUDED.payload;
+                        """, (
+                            doc["id"], doc["location"], doc["source_type"], 
+                            doc.get("headline"), doc["narrative_text"], 
+                            doc["issued_at"], doc["payload"]
+                        ))
+                    else: # SQLite
+                        cursor.execute("""
+                            INSERT INTO weather_documents (id, location, source_type, headline, narrative_text, issued_at, payload)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT (id) DO UPDATE SET
+                                location = excluded.location,
+                                source_type = excluded.source_type,
+                                headline = excluded.headline,
+                                narrative_text = excluded.narrative_text,
+                                issued_at = excluded.issued_at,
+                                payload = excluded.payload;
+                        """, (
+                            doc["id"], doc["location"], doc["source_type"], 
+                            doc.get("headline"), doc["narrative_text"], 
+                            doc["issued_at"], doc["payload"]
+                        ))
+                    synced_count += 1
+            except Exception as e:
+                print(f"Error syncing weather for {loc}: {e}")
+
+    return jsonify({
+        "status": "success",
+        "synced_count": synced_count
+    })
+
+@app.route("/weather/search", methods=["POST"])
+def search_weather():
+    """
+    POST /weather/search
+    Body: {"query": "flooding near rivers", "top_k": 5}
+    Embeds the search query and searches weather_embeddings using cosine similarity.
+    """
+    body = request.get_json() or {}
+    query = body.get("query")
+    top_k = int(body.get("top_k", 5))
+
+    if not query:
+        return jsonify({"error": "Missing query parameter"}), 400
+
+    top_k = max(1, min(20, top_k))
+    query_emb = model.encode(query).tolist()
+
+    matches = []
+    if USE_PGVECTOR:
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT d.id, d.location, d.headline, d.narrative_text, e.chunk_text,
+                           1 - (e.embedding <=> %s::vector) AS similarity
+                    FROM weather_embeddings e
+                    JOIN weather_documents d ON d.id = e.document_id
+                    ORDER BY e.embedding <=> %s::vector
+                    LIMIT %s;
+                """, (query_emb, query_emb, top_k))
+                rows = cursor.fetchall()
+                for r in rows:
+                    matches.append({
+                        "id": r["id"],
+                        "location": r["location"],
+                        "headline": r["headline"],
+                        "chunk_text": r["chunk_text"],
+                        "similarity": float(r["similarity"])
+                    })
+        except Exception as e:
+            return jsonify({"error": f"Database search failed: {str(e)}"}), 500
+    else:
+        # Python similarity calculation fallback (runs on SQLite and Non-pgvector Postgres)
+        raw_matches = python_cosine_similarity(query_emb, limit=top_k, table="weather_embeddings")
+        for r in raw_matches:
+            matches.append({
+                "id": r["document_id"],
+                "location": r["location"],
                 "headline": r["headline"],
                 "chunk_text": r["chunk_text"],
                 "similarity": float(r["similarity"])

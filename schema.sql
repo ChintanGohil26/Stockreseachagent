@@ -95,6 +95,30 @@ CREATE TABLE IF NOT EXISTS analytics_log (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 10. Weather Documents Table (Day 2 Homework)
+CREATE TABLE IF NOT EXISTS weather_documents (
+    id VARCHAR(100) PRIMARY KEY,
+    location VARCHAR(100) NOT NULL,
+    source_type VARCHAR(50) NOT NULL, -- "alert" or "forecast"
+    headline VARCHAR(255),
+    narrative_text TEXT NOT NULL,
+    issued_at TIMESTAMP NOT NULL,
+    payload TEXT, -- Raw JSON
+    synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10b. Weather Embeddings Table (Day 2 Homework)
+CREATE TABLE IF NOT EXISTS weather_embeddings (
+    id SERIAL PRIMARY KEY,
+    document_id VARCHAR(100) REFERENCES weather_documents(id) ON DELETE CASCADE,
+    chunk_index INT NOT NULL,
+    chunk_text TEXT NOT NULL,
+    embedding vector(384), -- pgvector 384-dim embedding
+    model_name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indices for performance optimization
 CREATE INDEX IF NOT EXISTS idx_price_snapshots_ticker ON price_snapshots(ticker, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_news_articles_ticker ON news_articles(ticker, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_weather_documents_loc ON weather_documents(location, issued_at DESC);
